@@ -17,23 +17,31 @@ Page({
     result: [],
     searchCon:'',     //输入内容
     searchResult:[],  //搜索列表
+    searchTick: 0,
     
     // 这两个属性用于定位地图中心，修改时会触发regionchange
     // 但是regionchange的时候不会刷新这两个量，否则将导致循环调用
     longitude: '', 
     latitude: '',
 
-    // 这两个属性用来刷新下方显示的坐标
-    center: { longitude: '', latitude: ''},
+    // 中心坐标 实时刷新
+    center: { longitude: '', latitude: '', },
+
+    // 当前位置 定时刷新
+    current: { longitude: '', latitude: '', },
+    address: '',
 
     // 控制选点标签
     lockPicker: false,
     showPicker: false,
     initial: true,
 
+    // 当前被选中的markerId
+    selectedMarkerId: -1,
+
     path_longitude: '',
     path_latitude:'',
-    address: '',
+
     scale: 13, //地图的扩大倍数
     des_lat: '',//目的地纬度
     des_lng: '',//目的地经度
@@ -41,16 +49,16 @@ Page({
     car_num:'',
 
     // 这两个数组对象由腾讯地图API原生支持
-    polylines: [],
+    polyline: [],
     markers: [
-    { //标记点用于在地图上显示标记的位置
-      id: 1,
-      latitude: '',
-      longitude: '',
-      iconPath: poiIcon,
-      width: 30,
-      height: 30,
-    },
+      {
+        id: 1,
+        latitude: '',
+        longitude: '',
+        iconPath: poiIcon,
+        width: 30,
+        height: 30,
+      },
     ],
     carLocation:[{
       "id": 1,
@@ -108,17 +116,30 @@ Page({
           latitude: res.latitude,
           center: res,
         });
-
       }
     })
 
     // 创建地图上下文
     this.mapCtx = wx.createMapContext("myMap");
+    this.updateCenter();
+    this.regeocoding(this.data.center, (address) => this.setData({ address: address }));
   },
 
   // 绑定input输入 --搜索
   bindKeyInput(e){
-    var that = this; 
+    if (e.detail.value == "") {
+      this.setData({searchResult: []});
+      return;
+    }
+    // 节流 防止触发百度接口并发限制
+    var currentTick = new Date().getTime();
+    if (currentTick - this.data.searchTick < 500)
+      return;
+    this.setData({
+      searchTick: currentTick
+    });
+
+    var that = this;
     var fail = function (data) { //请求失败
       console.log(data) 
     };
@@ -129,6 +150,7 @@ Page({
           return;
         }
         if (data.result[i].location){
+          data.result[i]['id'] = i;
           searchResult.push(data.result[i]);
         }
       }
@@ -146,23 +168,55 @@ Page({
     });
   },
 
+  // 使用回车时 
+  showAll() {
+    this.setData({
+      markers: this.data.searchResult.map(
+        (res) => { return { 
+          id: res.id,
+          title: res.name,
+          latitude: res.location.lat,
+          longitude: res.location.lng,
+          iconPath: poiIcon,
+          width: 30,
+          height: 30,
+          address: res.province + res.address
+        }
+      }),
+      searchResult: [],
+      lockPicker: false,
+      showPicker: false,
+    })
+  },
+
   // 点击搜索列表某一项
   tapSearchResult(e){
     var that = this;
     var value = e.currentTarget.dataset.value;
-    var str = 'markers[0].longitude', str2 = 'markers[0].latitude';
-    that.setData({
-      lockPicker: true,
-      showPicker: false,
+    let markers = [{ 
+      id: 0,
+      title: value.name,
+      latitude: value.location.lat,
+      longitude: value.location.lng,
+      iconPath: sltIcon,
+      width: 30,
+      height: 30,
+      address: value.province + value.address,
+    }]
+
+    this.mapCtx.moveToLocation({
       longitude: value.location.lng,
       latitude: value.location.lat,
-      searchResult:[],
-      searchCon: value.name,
-      address: value.province+value.city + value.district+value.name,
-      [str]: value.location.lng,
-      [str2]: value.location.lat,
+      success: (res) => {}
     })
-    that.setData({ lockPicker: false });
+
+    that.setData({
+      lockPicker: false,
+      showPicker: false,
+      markers: markers,
+      selectedMarkerId: 0,
+      searchResult: []
+    })
   },
   
  
@@ -213,48 +267,89 @@ Page({
   //地图位置发生变化
   regionchange(e) {
     // 地图发生变化的时候，获取中间点，也就是用户选择的位置
-    if (e.type == 'begin' && !this.data.initial && !this.data.lockPicker)
+    let detail = e.detail;
+    this.updateCenter();
+    if (e.detail.causedBy == 'gesture' && !this.data.lockPicker)
       this.setData({ showPicker: true });
-    if (!(e.type == 'end' && e.causedBy == 'drag') && !this.data.initial)
+    if (!(detail.type == 'end' && e.detail.causedBy == 'drag') || this.data.lockPicker)
       return;
-    let that = this;
+    this.regeocoding(this.data.center, (address) => this.setData({ address: address}));
+  },
+  
+  updateCenter: function() {
     this.mapCtx.getCenterLocation({
       success: (res) => { 
         this.setData({
           center: res
         });
-        bmap.regeocoding({
-          success: (res) => {
-            this.setData({
-              address: res.wxMarkerData[0].address
-            })
-          },
-          fail: (res) => { console.warn('regeocoding failed', res.message) },
-          location: that.data.center.latitude + ',' + that.data.center.longitude
-        })
       },
       fail: (res) => { console.warn(res) },
       complete: () => { console.log()}
     });
-    this.setData({initial: false});
+    this.setData({ initial: false });
   },
-  
+
+  regeocoding: function(location, func) {
+    bmap.regeocoding({
+      success: (res) => func(res.wxMarkerData[0].address),
+      fail: (res) => { console.log('regeocoding failed: ', res.message) },
+      location: location.latitude + ',' + location.longitude
+    });
+  },
+
   markertap(e) {
-    console.log(e.markerId)
-    for(var i = 0; i < this.data.markers.length; ++i) {
-      if (this.data.markers[i].id == e.markerId)
-        this.setData({
-          ['markers['+ i +'].iconPath']: sltIcon 
-        })
-      else
-        this.setData({
-          ['markers['+ i +'].iconPath']: poiIcon
-        });
-    }
-    //this.regionchange(e)
-    // this.getLngLat();
-    console.log(e);
+    console.log("Tap marker: ", e.detail.markerId)
+    if (this.data.selectedMarkerId == e.detail.markerId)
+      this.setData({ 
+        ['markers['+ e.detail.markerId +'].iconPath']: poiIcon,
+        selectedMarkerId: -1
+      });
+    if (this.data.selectedMarkerId == -1)
+      this.setData({ 
+        ['markers['+ e.detail.markerId +'].iconPath']: sltIcon,
+        selectedMarkerId: e.detail.markerId
+      });
+    else
+      this.setData({ 
+        ['markers['+ e.detail.markerId +'].iconPath']: sltIcon,
+        ['markers['+ this.data.selectedMarkerId +'].iconPath']: poiIcon,
+        selectedMarkerId: e.detail.markerId
+      });
   },
+
+  // 调用该方法来显示路线并执行动画（当doAnimation为true）
+  showPath: function(points, doAnimation) {
+    this.setData({
+      polyline: [{
+        points: points,
+        color:"#1E90FFBF",
+        width: 6,
+        dottedLine: false
+      }]
+    })
+
+    if (doAnimation) {
+      let markers = this.data.markers;
+      if(!markers.some((marker) => marker.id == -1))
+        markers.push({ 
+          id: -1,
+          latitude: points[0].latitude,
+          longitude: points[0].longitude,
+          iconPath: pinIcon,
+          anchor: {x:.5, y:.5}, 
+          width: 20,
+          height: 20,
+        })
+      this.setData({ markers: markers });
+      this.mapCtx.moveAlong({
+        markerId: -1,
+        path: points,
+        duration: 3000,
+        success: (res) => { console.log()},
+      })
+    }
+  },
+
   controltap(e) {
     var that = this;
     console.log("scale===" + this.data.scale)
@@ -268,6 +363,7 @@ Page({
       })
     }
   },
+
   click: function() {
     this.getLngLat()
   },
@@ -324,11 +420,13 @@ Page({
   sendData: function(){
     const that = this;
     var tmp = [];
+    this.showPath([this.data.center, this.data.markers[this.data.selectedMarkerId]], true)
     wx.request({
-      //发送当前经纬度信息
+      // 发送当前经纬度信息
       url:'http://server.natappfree.cc:44285/ocean/get_closet_ugv_id?start_lat=this.data.latitude&start_lng=this.data.longitude', 
       header: { 'content-type': 'application/json' },
       data: {
+        // TODO: 具体规划的逻辑我不清楚，根据需要你从data里面拿
         //data部分目的地经纬度信息需要用户根据中心点图标移动获取
         start_lat: this.data.latitude,
         start_lng: this.data.longitude,
@@ -339,8 +437,7 @@ Page({
       },
       method: 'get',
       success: function (res) {
-        console.log("成功");
-        console.log(res);
+        console.log("Route query: ", res);
         that.setData({
             car_num:res.data.car_num,
             distance: res.data.distance,
@@ -349,24 +446,10 @@ Page({
             car_lng:res.data.car_lng,
             user_path:res.data.user_path
         })
+        this.showPath(this.data.user_path, true);
       },
     })
-
-    for (tmp in this.data.user_path){
-      console.log(this.data.user_path[tmp].lat)
-      var str = 'markers[1].longitude',
-          str2 = 'markers[1].latitude';
-      that.setData({
-        path_longitude: this.data.user_path[tmp].lng,
-        path_latitude: this.data.user_path[tmp].lat,
-        [str]: this.data.path_longitude,
-        [str2]: this.data.path_latitude,
-      })
-    }
-    //this.data.markers[1].latitude='121.381845';
-    //this.data.markers[1].latitude='31.1116';
     
-    //var polyline = new BMap.Polyline([new BMap.Point(31.1116,121.381845),new BMap.Point(31.1048,121.405)],{strokeColor: "blue", strokeWeight: 6, strokeOpacity: 0.5});
   },  
   
   /**

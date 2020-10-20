@@ -36,7 +36,7 @@
     "minifyWXSS": true
   },
   "compileType": "miniprogram",
-  "libVersion": "2.7.0",
+  "libVersion": "2.13.1",
   "appid": "wx05e4e33088470a89",
   "projectname": "baiduMAP",
   "debugOptions": {

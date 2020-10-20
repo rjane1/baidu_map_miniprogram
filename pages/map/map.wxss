@@ -120,16 +120,29 @@ map{
   padding:10rpx;
   width: 100%;
 }
-.footer>view:not(:last-of-type){
+.address-container>view:not(:last-of-type){
   padding-bottom: 5rpx;
 }
-.footer>view{
+.address-container>view{
   display: flex;
   flex-wrap: wrap;
+  font-size: medium;
 }
-.footer>view text:nth-of-type(1){
+
+.address-container-marker>view{
+  display: flex;
+  flex-wrap: wrap;
+  font-size: small;
+}
+
+.address-container>view text:nth-of-type(1){
   width: 100%;
 }
-.footer>view text:nth-of-type(2){
+.address-container>view text:nth-of-type(2){
   width: 85%;
+}
+
+.stroke {
+  font-size: larger !important;
+  font-weight: 600;
 }

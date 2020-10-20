@@ -3,7 +3,7 @@
   <!-- 搜索框 -->
   <view class='search-group'>
     <text class='icon icon-item'></text>
-    <input class='sousuo' type='text' placeholder='搜索' bindinput="bindKeyInput" value='{{searchCon}}'></input>
+    <input class='sousuo' type='text' placeholder='搜索' bindinput="bindKeyInput" bindconfirm="showAll" value='{{searchCon}}' ></input>
   </view>
 
 
@@ -11,15 +11,15 @@
     <!-- 地图 -->
     <map id="myMap" 
     latitude="{{latitude}}" 
-    longitude="{{longitude}}" 
+    longitude="{{longitude}}"
     scale="{{scale}}" 
     markers="{{markers}}" 
     covers="{{covers}}" 
-    polyline="{{polylines}}"
+    polyline="{{polyline}}"
     bindcontroltap="controltap"
     bindmarkertap="markertap"
     bindregionchange="regionchange"
-    show-location >
+    show-location controls>
 
     <!-- 搜索列表 -->
     <cover-view class="searchCon">
@@ -54,14 +54,16 @@
 
   <!-- 获取的地址信息 -->
   <view class='footer'>
-    <view>
-      <text>地址：{{address}}</text>
+    <view class='address-container-marker' wx:if="{{ selectedMarkerId > -1 }}">
+      <view class="stroke"><text>{{markers[selectedMarkerId].title}}</text></view>
+      <view><text>地址：{{markers[selectedMarkerId].address}}</text></view>
+      <view><text>经度：{{format.toFixed(markers[selectedMarkerId].longitude, 4)}}</text></view>
+      <view><text>纬度：{{format.toFixed(markers[selectedMarkerId].latitude, 4)}}</text></view>
     </view>
-    <view>
-      <text>经度：{{format.toFixed(center.longitude, 4)}}</text>
-    </view>
-    <view>
-      <text>纬度：{{format.toFixed(center.latitude, 4)}}</text>
+    <view class='address-container' wx:else>
+      <view><text>地址：{{address}}</text></view>
+      <view><text>经度：{{format.toFixed(center.longitude, 4)}}</text></view>
+      <view><text>纬度：{{format.toFixed(center.latitude, 4)}}</text></view>
     </view>
   </view>
 </view>
