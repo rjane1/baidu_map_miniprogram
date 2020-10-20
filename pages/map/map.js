@@ -162,7 +162,7 @@ Page({
       [str]: value.location.lng,
       [str2]: value.location.lat,
     })
-
+    that.setData({ lockPicker: false });
   },
   
  
@@ -242,10 +242,14 @@ Page({
   markertap(e) {
     console.log(e.markerId)
     for(var i = 0; i < this.data.markers.length; ++i) {
-      if (marker[i].id == e.markerId)
+      if (this.data.markers[i].id == e.markerId)
         this.setData({
           ['markers['+ i +'].iconPath']: sltIcon 
         })
+      else
+        this.setData({
+          ['markers['+ i +'].iconPath']: poiIcon
+        });
     }
     //this.regionchange(e)
     // this.getLngLat();
@@ -317,7 +321,7 @@ Page({
   
 
   //接口数据库函数：
-  sendData:function(){
+  sendData: function(){
     const that = this;
     var tmp = [];
     wx.request({
