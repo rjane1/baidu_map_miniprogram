@@ -7,6 +7,7 @@
 }
 
 .section{
+  position: relative;
   height: 85%; 
 }
 map{
@@ -16,11 +17,13 @@ map{
 .text{
   font-size: 32rpx;
 }
+
 .button-group{
-  position:fixed;
+  position: absolute;
   z-index: 100;
-  margin-top:800rpx;
-  margin-left:500rpx;  
+  bottom: 50rpx;
+  right: 50rpx;
+  float: right;
 }
 
 .searchCon{

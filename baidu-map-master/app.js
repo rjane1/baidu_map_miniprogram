@@ -67,6 +67,6 @@ App({
 
   globalData: {
     userInfo: null,
-    ak: 'vH7TxY1X0aLSNr0XXkeeGxvtmGpo9In6', //百度地图秘钥
+    ak: 'HMRxbRMkSfPYvpoGyINGad8I9cv2HL34', //百度地图秘钥
   }
 })

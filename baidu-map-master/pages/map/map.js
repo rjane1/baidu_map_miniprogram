@@ -3,21 +3,34 @@
 const app = getApp();
 // 引用百度地图微信小程序JSAPI模块
 const BMap = require('../../libs/bmap-wx.min.js');
-//const bmapLushu = require('../../libs/LuShu_min.js');
 var bmap;
-var util = require('../../utils/util.js')
+var util = require('../../utils/util.js');
+const pinIcon = '../../public/image/lushu.png';
+const poiIcon = '../../public/image/location.png';
+const sltIcon = '../../public/image/location-selected.png';
 Page({
-
+  mapCtx: undefined,
   /**
    * 页面的初始数据
    */
   data: {
     result: [],
-    types: ["将GCJ-02(火星坐标)转为百度坐标"],
-    searchCon:'',//输入内容
-    searchResult:[],//搜索列表
-    longitude: '', //经度
-    latitude: '', //纬度
+    searchCon:'',     //输入内容
+    searchResult:[],  //搜索列表
+    
+    // 这两个属性用于定位地图中心，修改时会触发regionchange
+    // 但是regionchange的时候不会刷新这两个量，否则将导致循环调用
+    longitude: '', 
+    latitude: '',
+
+    // 这两个属性用来刷新下方显示的坐标
+    center: { longitude: '', latitude: ''},
+
+    // 控制选点标签
+    lockPicker: false,
+    showPicker: false,
+    initial: true,
+
     path_longitude: '',
     path_latitude:'',
     address: '',
@@ -26,30 +39,24 @@ Page({
     des_lng: '',//目的地经度
     user_path:[],
     car_num:'',
+
+    // 这两个数组对象由腾讯地图API原生支持
+    polylines: [],
     markers: [
     { //标记点用于在地图上显示标记的位置
       id: 1,
       latitude: '',
       longitude: '',
-      iconPath: '../../public/image/location.png',
-      width: 1,
-      height: 1,
+      iconPath: poiIcon,
+      width: 30,
+      height: 30,
     },
-    { //标记点用于在地图上显示路线
-      id: 2,
-      latitude: '121.449043',
-      longitude: '31.031268',
-      iconPath: '../../public/image/lushu.png',
-      width: 1,
-      height: 1,
-    },
-
     ],
     carLocation:[{
       "id": 1,
       "lat":"121.449043",
       "lng": "31.031268",
-       "desc":"电信群楼5号楼东侧路边(环一路)",
+      "desc":"电信群楼5号楼东侧路边(环一路)",
       "name": "car_1"
     },{
       "id": 2,
@@ -61,7 +68,7 @@ Page({
       "id": 3,
       "lat":"121.444233",
       "lng": "31.031201",
-       "desc":"研究生院",
+      "desc":"研究生院",
       "name": "car_3"
     },{
       "id": 4,
@@ -84,38 +91,29 @@ Page({
    * 生命周期函数--监听页面加载
    */
   onLoad:function(options) {
-    var array = [];
-    /**
-     * 将GCJ-02(火星坐标)转为百度坐标
-     */
-    var result2 = util.transformFromGCJToBaidu(22.53329, 113.83308);
-    console.log("result2 = ", result2)
-    array.push(result2);
-    this.setData({
-      result: array
-    })
-    const that = this;
 
     // 实例化百度地图API核心类
     bmap = new BMap.BMapWX({
       ak: app.globalData.ak
-    })
-   
-
-    //获取当前位置经纬度
-    app.getLocation(function(location) {
-      console.log(location);
-      var str = 'markers[0].longitude',
-        str2 = 'markers[0].latitude';
-      that.setData({
-        longitude: location.longitude,
-        latitude: location.latitude,
-        [str]: location.longitude,
-        [str2]: location.latitude,
-      })
-    })
+    });
     
+    //获取当前位置经纬度
+    const that = this;
+    wx.getLocation({
+      type: 'gcj02',
+      success: (res) => {
+        console.log('Current Location: ', res);
+        that.setData({
+          longitude: res.longitude,
+          latitude: res.latitude,
+          center: res,
+        });
 
+      }
+    })
+
+    // 创建地图上下文
+    this.mapCtx = wx.createMapContext("myMap");
   },
 
   // 绑定input输入 --搜索
@@ -151,9 +149,11 @@ Page({
   // 点击搜索列表某一项
   tapSearchResult(e){
     var that = this;
-    var value=e.currentTarget.dataset.value;
+    var value = e.currentTarget.dataset.value;
     var str = 'markers[0].longitude', str2 = 'markers[0].latitude';
     that.setData({
+      lockPicker: true,
+      showPicker: false,
       longitude: value.location.lng,
       latitude: value.location.lat,
       searchResult:[],
@@ -166,66 +166,92 @@ Page({
   },
   
  
-  // markets
-  getLngLat: function() {
-    var that = this;
-    this.mapCtx = wx.createMapContext("myMap");
-    var latitude, longitude;
-    this.mapCtx.getCenterLocation({
-      success: function(res) {
-        latitude = res.latitude;
-        longitude = res.longitude;
-        var str = 'markers[0].longitude',
-          str2 = 'markers[0].latitude';
-        var array = [];
-        /**
-         * 将GCJ-02(火星坐标)转为百度坐标
-         */
-        var result2 = util.transformFromGCJToBaidu(res.longitude, res.latitude);
-        //console.log("result2 = ", result2)
-        array.push(result2);
-        that.setData({
-          longitude: res.longitude,
-          latitude: res.latitude,
-          [str]: res.longitude,
-          [str2]: res.latitude,
-          result: array,
-        })
-        //that.regeocoding();
-      }
-    })
+  // 这个方法没用
+  // getLngLat: function() {
+  //   var that = this;
+  //   this.mapCtx = wx.createMapContext("myMap");
+  //   var latitude, longitude;
+  //   this.mapCtx.getCenterLocation({
+  //     success: function(res) {
+  //       latitude = res.latitude;
+  //       longitude = res.longitude;
+  //       var str = 'markers[0].longitude',
+  //         str2 = 'markers[0].latitude';
+  //       var array = [];
+  //       /**
+  //        * 将GCJ-02(火星坐标)转为百度坐标
+  //        */
+  //       var result2 = util.transformFromGCJToBaidu(res.longitude, res.latitude);
+  //       console.log("Center location: ", result2)
+  //       array.push(result2);
+  //       that.setData({
+  //         longitude: res.longitude,
+  //         latitude: res.latitude,
+  //         [str]: res.longitude,
+  //         [str2]: res.latitude,
+  //         result: array,
+  //       })
+  //       //that.regeocoding();
+  //     }
+  //   })
 
-    //平移marker，修改坐标位置 
-     this.mapCtx.translateMarker({
-       markerId: 1,
-       autoRotate: true,
-       duration: 1000,
-       destination: {
-         latitude: latitude,
-         longitude: longitude,
-       },
-       animationEnd() {
-         console.log('animation end')
-       }
-     })
-  },
+  //   //平移marker，修改坐标位置 
+  //    this.mapCtx.translateMarker({
+  //      markerId: 1,
+  //      autoRotate: true,
+  //      duration: 1000,
+  //      destination: {
+  //        latitude: latitude,
+  //        longitude: longitude,
+  //      },
+  //      animationEnd() {
+  //        console.log('animation end')
+  //      }
+  //    })
+  // },
 
   //地图位置发生变化
   regionchange(e) {
     // 地图发生变化的时候，获取中间点，也就是用户选择的位置
-    if (e.type == 'end' && (e.causedBy == 'scale' || e.causedBy == 'drag')) {
-      this.getLngLat();
-    }
+    if (e.type == 'begin' && !this.data.initial && !this.data.lockPicker)
+      this.setData({ showPicker: true });
+    if (!(e.type == 'end' && e.causedBy == 'drag') && !this.data.initial)
+      return;
+    let that = this;
+    this.mapCtx.getCenterLocation({
+      success: (res) => { 
+        this.setData({
+          center: res
+        });
+        bmap.regeocoding({
+          success: (res) => {
+            this.setData({
+              address: res.wxMarkerData[0].address
+            })
+          },
+          fail: (res) => { console.warn('regeocoding failed', res.message) },
+          location: that.data.center.latitude + ',' + that.data.center.longitude
+        })
+      },
+      fail: (res) => { console.warn(res) },
+      complete: () => { console.log()}
+    });
+    this.setData({initial: false});
   },
   
   markertap(e) {
     console.log(e.markerId)
+    for(var i = 0; i < this.data.markers.length; ++i) {
+      if (marker[i].id == e.markerId)
+        this.setData({
+          ['markers['+ i +'].iconPath']: sltIcon 
+        })
+    }
     //this.regionchange(e)
-    this.getLngLat();
+    // this.getLngLat();
     console.log(e);
   },
   controltap(e) {
-    //console.log(e.controlId)
     var that = this;
     console.log("scale===" + this.data.scale)
     if (e.controlId === 1) {
@@ -242,45 +268,6 @@ Page({
     this.getLngLat()
   },
 
-  // 发起regeocoding逆地址解析 -- 从经纬度转换为地址信息
-  // regeocoding() {
-  //   const that = this;
-  //   
-  //   wx.request({
-  //     url: 'https://api.map.baidu.com/reverse_geocoding/v3/?ak=vH7TxY1X0aLSNr0XXkeeGxvtmGpo9In6&output=json&coordtype=wgs84ll&location=that.longtitude.,that.latitude',
-  //     data:{},
-  //     header:{
-  //       'Content-Type': 'application/json'
-  //     },
-  //     location: that.data.latitude + ',' + that.data.longitude,
-  //     success:(res)=>{
-  //       console.log(res.data.result);
-  //       console.log(res.data.result.addressComponent.city + res.data.result.addressComponent.district);
-  //       that.setData({
-  //         address:res.data.result.addressComponent.city + res.data.result.addressComponent.district
-  //       });
-  //       console.log('success')
-  //     },
-  //     fail:function(){
-  //       console.log('fail')
-  //     },
-  //     complete:function(){
-  //       console.log('complete')
-  //     }
-  //    })
-//     bmap.regeocoding({
-//       location: that.data.latitude + ',' + that.data.longitude,
-//       success: function(res){
-//         that.setData({
-//           address: res.wxMarkerData[0].address
-//         })
-//       },
-//       fail: function (res) {
-//         //that.tipsModal('请开启位置服务权限并重试!')
-//       },
-
-//     });
-//   },
   //提示
   // tipsModal: function (msg) {
   //   wx.showModal({
@@ -328,9 +315,6 @@ Page({
     })
   },
   
-
-
-
 
   //接口数据库函数：
   sendData:function(){
