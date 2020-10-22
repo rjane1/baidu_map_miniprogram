@@ -28,7 +28,6 @@
       "disablePlugins": [],
       "outputPath": ""
     },
-    "enableEngineNative": false,
     "useIsolateContext": true,
     "useCompilerModule": true,
     "userConfirmedUseCompilerModuleSwitch": false,
@@ -37,8 +36,8 @@
     "minifyWXSS": true
   },
   "compileType": "miniprogram",
-  "libVersion": "2.7.0",
-  "appid": "wxe21b3075192d22d8",
+  "libVersion": "2.13.1",
+  "appid": "wx05e4e33088470a89",
   "projectname": "baiduMAP",
   "debugOptions": {
     "hidedInDevtools": []
