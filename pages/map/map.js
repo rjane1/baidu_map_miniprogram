@@ -114,6 +114,7 @@ Page({
         that.setData({
           longitude: res.longitude,
           latitude: res.latitude,
+          current: res,
           center: res,
         });
       }
@@ -121,8 +122,11 @@ Page({
 
     // 创建地图上下文
     this.mapCtx = wx.createMapContext("myMap");
-    this.updateCenter();
-    this.regeocoding(this.data.center, (address) => this.setData({ address: address }));
+    this.updateCenter(
+      (center) => this.regeocoding(center, 
+        (address) => this.setData({ address: address }))
+    );
+    
   },
 
   // 绑定input输入 --搜索
@@ -268,20 +272,22 @@ Page({
   regionchange(e) {
     // 地图发生变化的时候，获取中间点，也就是用户选择的位置
     let detail = e.detail;
+    console.log(e.detail)
     this.updateCenter();
-    if (e.detail.causedBy == 'gesture' && !this.data.lockPicker)
+    if ((detail.causedBy == 'gesture' || 'gesture' in detail) && !this.data.lockPicker)
       this.setData({ showPicker: true });
-    if (!(detail.type == 'end' && e.detail.causedBy == 'drag') || this.data.lockPicker)
-      return;
-    this.regeocoding(this.data.center, (address) => this.setData({ address: address}));
+    if (detail.type == 'end' && !this.data.lockPicker)
+      this.regeocoding(this.data.center, (address) => this.setData({ address: address}));
   },
   
-  updateCenter: function() {
+  updateCenter: function(func) {
     this.mapCtx.getCenterLocation({
       success: (res) => { 
         this.setData({
           center: res
         });
+        if (!(typeof func == 'undefined'))
+          func(res);
       },
       fail: (res) => { console.warn(res) },
       complete: () => { console.log()}
@@ -420,33 +426,43 @@ Page({
   sendData: function(){
     const that = this;
     var tmp = [];
-    this.showPath([this.data.center, this.data.markers[this.data.selectedMarkerId]], true)
+    let start = this.data.current;
+    let des = this.data.markers[this.data.selectedMarkerId];
     wx.request({
       // 发送当前经纬度信息
-      url:'http://server.natappfree.cc:44285/ocean/get_closet_ugv_id?start_lat=this.data.latitude&start_lng=this.data.longitude', 
+      url:'http://server.natappfree.cc:35166/ocean/get_closet_ugv_id', 
       header: { 'content-type': 'application/json' },
       data: {
         // TODO: 具体规划的逻辑我不清楚，根据需要你从data里面拿
         //data部分目的地经纬度信息需要用户根据中心点图标移动获取
-        start_lat: this.data.latitude,
-        start_lng: this.data.longitude,
-        mid_lat:(parseFloat(this.data.latitude)+parseFloat(this.data.markers[0].latitude))/2,
-        mid_lng: (parseFloat(this.data.longitude)+parseFloat(this.data.markers[0].longitude))/2,
-        des_lat: this.data.markers[0].latitude,
-        des_lng: this.data.markers[0].longitude
+        start_lat: start.latitude,
+        start_lng: start.longitude,
+        mid_lat: (parseFloat(start.latitude)+parseFloat(des.latitude))/2,
+        mid_lng: (parseFloat(start.longitude)+parseFloat(des.longitude))/2,
+        des_lat: des.latitude,
+        des_lng: des.longitude
       },
       method: 'get',
       success: function (res) {
+        if (res.statusCode != 200) {
+          console.warn("Route query failed")
+          return;
+        }
         console.log("Route query: ", res);
         that.setData({
-            car_num:res.data.car_num,
+            car_num: res.data.car_num,
             distance: res.data.distance,
-            arrived_time:res.data.arrived_time,
+            arrived_time: res.data.arrived_time,
             car_lat: res.data.car_lat,
-            car_lng:res.data.car_lng,
-            user_path:res.data.user_path
+            car_lng: res.data.car_lng,
+            user_path: res.data.user_path.map((p) => {
+              return {
+                longitude: p.lng,
+                latitude: p.lat
+              }
+            })
         })
-        this.showPath(this.data.user_path, true);
+        that.showPath(that.data.user_path, true);
       },
     })
     
